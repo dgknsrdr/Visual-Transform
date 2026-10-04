@@ -1,4 +1,5 @@
 import torch
+import torchvision
 from torchvision import datasets,transforms
 from torch.utils.data import DataLoader,random_split,Subset
 import torch.nn as nn
@@ -270,19 +271,30 @@ def train(model: torch.nn.Module,
     return results
 
 vit = VIT(num_classes=len(class_names)).to(device)
-optimizer = torch.optim.Adam(params=vit.parameters(),
-                             lr=3e-3, # Base LR from Table 3 for ViT-* ImageNet-1k
-                             betas=(0.9, 0.999), # default values but also mentioned in ViT paper section 4.1 (Training & Fine-tuning)
-                             weight_decay=0.3) # from the ViT paper section 4.1 (Training & Fine-tuning) and Table 3 for ViT-* ImageNet-1k
+pretrained_vit_weights = torchvision.models.ViT_B_16_Weights.DEFAULT # requires torchvision >= 0.13, "DEFAULT" means best available
 
-# Setup the loss function for multi-class classification
+
+pretrained_vit = torchvision.models.vit_b_16(weights=pretrained_vit_weights).to(device)
+
+
+for parameter in pretrained_vit.parameters():
+    parameter.requires_grad = False
+
+
+pretrained_vit.heads = nn.Linear(in_features=768, out_features=len(class_names)).to(device)
+
+pretrained_vit_transforms = pretrained_vit_weights.transforms()
+print(pretrained_vit_transforms)
+
+optimizer = torch.optim.Adam(params=pretrained_vit.parameters(),
+                             lr=1e-3)
 loss_fn = torch.nn.CrossEntropyLoss()
 
-# Train the model and save the training results to a dictionary
-results = train(model=vit,
-                       train_dataloader=train_loader,
-                       test_dataloader=test_loader,
-                       optimizer=optimizer,
-                       loss_fn=loss_fn,
-                       epochs=10,
-                       device=device)
+
+pretrained_vit_results = train(model=pretrained_vit,
+                                      train_dataloader=train_loader,
+                                      test_dataloader=test_loader,
+                                      optimizer=optimizer,
+                                      loss_fn=loss_fn,
+                                      epochs=5,
+                                      device=device)
